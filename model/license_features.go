@@ -219,8 +219,6 @@ func (l *License) HasLDAP() bool {
 		return false
 	}
 	return (l.Features != nil && l.Features.LDAP != nil && *l.Features.LDAP) ||
-		l.SkuShortName == LicenseShortSkuE10 ||
-		l.SkuShortName == LicenseShortSkuE20 ||
 		l.SkuShortName == LicenseShortSkuProfessional ||
 		l.SkuShortName == LicenseShortSkuEnterprise
 }

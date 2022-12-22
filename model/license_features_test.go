@@ -136,6 +136,7 @@ func TestIsCloud(t *testing.T) {
 }
 
 func TestHasLDAP(t *testing.T) {
+	boolFalse := false
 	boolTrue := true
 	t.Run("false if license is nil", func(t *testing.T) {
 		var license *License
@@ -144,15 +145,13 @@ func TestHasLDAP(t *testing.T) {
 
 	l1 := License{}
 	assert.False(t, l1.HasLDAP())
-	l1.Features = &Features{}
+	l1.Features = &Features{FutureFeatures: &boolFalse}
 	assert.False(t, l1.HasLDAP())
 	l1.Features.SetDefaults()
 	assert.False(t, l1.HasLDAP())
 	l1.Features.LDAP = &boolTrue
 	assert.True(t, l1.HasLDAP())
 
-	assert.True(t, (&License{SkuShortName: LicenseShortSkuE10}).HasLDAP())
-	assert.True(t, (&License{SkuShortName: LicenseShortSkuE20}).HasLDAP())
 	assert.True(t, (&License{SkuShortName: LicenseShortSkuProfessional}).HasLDAP())
 	assert.True(t, (&License{SkuShortName: LicenseShortSkuEnterprise}).HasLDAP())
 }
