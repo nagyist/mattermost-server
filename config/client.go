@@ -137,7 +137,7 @@ func GenerateClientConfig(c *model.Config, telemetryID string, license *model.Li
 	if license != nil {
 		props["ExperimentalEnableAuthenticationTransfer"] = strconv.FormatBool(*c.ServiceSettings.ExperimentalEnableAuthenticationTransfer)
 
-		if *license.Features.LDAP {
+		if license.HasLDAP() {
 			props["LdapNicknameAttributeSet"] = strconv.FormatBool(*c.LdapSettings.NicknameAttribute != "")
 			props["LdapFirstNameAttributeSet"] = strconv.FormatBool(*c.LdapSettings.FirstNameAttribute != "")
 			props["LdapLastNameAttributeSet"] = strconv.FormatBool(*c.LdapSettings.LastNameAttribute != "")
@@ -318,7 +318,7 @@ func GenerateLimitedClientConfig(c *model.Config, telemetryID string, license *m
 	props["GuestAccountsEnforceMultifactorAuthentication"] = strconv.FormatBool(*c.GuestAccountsSettings.EnforceMultifactorAuthentication)
 
 	if license != nil {
-		if *license.Features.LDAP {
+		if license.HasLDAP() {
 			props["EnableLdap"] = strconv.FormatBool(*c.LdapSettings.Enable)
 			props["LdapLoginFieldName"] = *c.LdapSettings.LoginFieldName
 			props["LdapLoginButtonColor"] = *c.LdapSettings.LoginButtonColor

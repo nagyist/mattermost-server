@@ -12,10 +12,10 @@ import (
 )
 
 func TestLicenseFeaturesToMap(t *testing.T) {
-	f := Features{}
-	f.SetDefaults()
+	l := License{}
+	l.Features.SetDefaults()
 
-	m := f.ToMap()
+	m := l.FeaturesToMap()
 
 	CheckTrue(t, m["ldap"].(bool))
 	CheckTrue(t, m["ldap_groups"].(bool))

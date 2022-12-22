@@ -19,7 +19,7 @@ import (
 func (a *App) SyncLdap(includeRemovedMembers bool) {
 	a.Srv().Go(func() {
 
-		if license := a.Srv().License(); license != nil && *license.Features.LDAP && *a.Config().LdapSettings.EnableSync {
+		if a.Srv().License().HasLDAP() && *a.Config().LdapSettings.EnableSync {
 			if ldapI := a.Ldap(); ldapI != nil {
 				ldapI.StartSynchronizeJob(false, includeRemovedMembers)
 			} else {
@@ -31,7 +31,7 @@ func (a *App) SyncLdap(includeRemovedMembers bool) {
 
 func (a *App) TestLdap() *model.AppError {
 	license := a.Srv().License()
-	if ldapI := a.Ldap(); ldapI != nil && license != nil && *license.Features.LDAP && (*a.Config().LdapSettings.Enable || *a.Config().LdapSettings.EnableSync) {
+	if ldapI := a.Ldap(); ldapI != nil && license.HasLDAP() && (*a.Config().LdapSettings.Enable || *a.Config().LdapSettings.EnableSync) {
 		if err := ldapI.RunTest(); err != nil {
 			err.StatusCode = 500
 			return err

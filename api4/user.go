@@ -2998,7 +2998,7 @@ func migrateAuthToLDAP(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if c.App.Channels().License() == nil || !*c.App.Channels().License().Features.LDAP {
+	if !c.App.Channels().License().HasLDAP() {
 		c.Err = model.NewAppError("api.migrateAuthToLDAP", "api.admin.ldap.not_available.app_error", nil, "", http.StatusNotImplemented)
 		return
 	}

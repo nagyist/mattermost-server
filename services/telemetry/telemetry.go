@@ -864,7 +864,7 @@ func (ts *TelemetryService) trackLicense() {
 			"edition":     license.SkuShortName,
 		}
 
-		features := license.Features.ToMap()
+		features := license.FeaturesToMap()
 		for featureName, featureValue := range features {
 			data["feature_"+featureName] = featureValue
 		}
