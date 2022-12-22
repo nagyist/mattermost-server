@@ -151,8 +151,8 @@ func TestHasLDAP(t *testing.T) {
 	l1.Features.LDAP = &boolTrue
 	assert.True(t, l1.HasLDAP())
 
-	assert.False(t, (&License{SkuShortName: LicenseShortSkuE10}).HasLDAP())
-	assert.False(t, (&License{SkuShortName: LicenseShortSkuE20}).HasLDAP())
-	assert.False(t, (&License{SkuShortName: LicenseShortSkuProfessional}).HasLDAP())
-	assert.False(t, (&License{SkuShortName: LicenseShortSkuEnterprise}).HasLDAP())
+	assert.True(t, (&License{SkuShortName: LicenseShortSkuE10}).HasLDAP())
+	assert.True(t, (&License{SkuShortName: LicenseShortSkuE20}).HasLDAP())
+	assert.True(t, (&License{SkuShortName: LicenseShortSkuProfessional}).HasLDAP())
+	assert.True(t, (&License{SkuShortName: LicenseShortSkuEnterprise}).HasLDAP())
 }
