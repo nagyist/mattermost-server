@@ -10,7 +10,7 @@ import (
 )
 
 func TestLicenseFeaturesToMap(t *testing.T) {
-	l := License{}
+	l := License{Features: &Features{}}
 	l.Features.SetDefaults()
 
 	m := l.FeaturesToMap()
