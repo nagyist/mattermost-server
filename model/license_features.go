@@ -205,16 +205,20 @@ func (l *License) IsCloud() bool {
 }
 
 func (l *License) HasEnterpriseMarketplacePlugins() bool {
-	return l != nil &&
-		(l.Features != nil && l.Features.EnterprisePlugins != nil && *l.Features.EnterprisePlugins) ||
+	if l == nil {
+		return false
+	}
+	return (l.Features != nil && l.Features.EnterprisePlugins != nil && *l.Features.EnterprisePlugins) ||
 		l.SkuShortName == LicenseShortSkuE20 ||
 		l.SkuShortName == LicenseShortSkuProfessional ||
 		l.SkuShortName == LicenseShortSkuEnterprise
 }
 
 func (l *License) HasLDAP() bool {
-	return l != nil &&
-		(l.Features != nil && l.Features.LDAP != nil && *l.Features.LDAP) ||
+	if l == nil {
+		return false
+	}
+	return (l.Features != nil && l.Features.LDAP != nil && *l.Features.LDAP) ||
 		l.SkuShortName == LicenseShortSkuE10 ||
 		l.SkuShortName == LicenseShortSkuE20 ||
 		l.SkuShortName == LicenseShortSkuProfessional ||
