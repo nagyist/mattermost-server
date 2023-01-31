@@ -41,6 +41,7 @@ endif
 
 ifeq ($(BUILD_NUMBER),dev)
 	export MM_FEATUREFLAGS_GRAPHQL = true
+	-include ../enterprise/localdev.mk
 endif
 
 # Enterprise
