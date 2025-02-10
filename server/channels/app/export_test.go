@@ -14,6 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mattermost/mattermost/server/v8/channels/testlib"
+
+	"github.com/mattermost/mattermost/server/public/shared/mlog"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -160,7 +164,7 @@ func TestCopyEmojiImages(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(filePath)
 
-	copyError := th.App.copyEmojiImages(emoji.Id, emojiImagePath, pathToDir)
+	copyError := th.App.copyEmojiImages(th.Context, emoji.Id, emojiImagePath, pathToDir)
 	require.NoError(t, copyError)
 
 	_, err = os.Stat(pathToDir + "/" + emoji.Id + "/image")
@@ -354,6 +358,51 @@ func TestExportDMChannel(t *testing.T) {
 		channels, nErr = th2.App.Srv().Store().Channel().GetAllDirectChannelsForExportAfter(1000, "00000000", false)
 		require.NoError(t, nErr)
 		assert.Empty(t, channels)
+	})
+
+	t.Run("Should not export DM channel if other user is permanently deleted", func(t *testing.T) {
+		th1 := Setup(t).InitBasic()
+		defer th1.TearDown()
+
+		// Create a DM Channel with another user
+		dmc1 := th1.CreateDmChannel(th1.BasicUser2)
+		th1.CreatePost(dmc1)
+
+		// Create a DM Channel with self
+		dmc2 := th1.CreateDmChannel(th1.BasicUser)
+		th1.CreatePost(dmc2)
+
+		channels, nErr := th1.App.Srv().Store().Channel().GetAllDirectChannelsForExportAfter(1000, "00000000", false)
+		require.NoError(t, nErr)
+		assert.Equal(t, 2, len(channels))
+
+		// Permanentley delete other user
+		appErr := th1.App.PermanentDeleteUser(th1.Context, th1.BasicUser2)
+		require.Nil(t, appErr)
+
+		var b bytes.Buffer
+		err := th1.App.BulkExport(th1.Context, &b, "somePath", nil, model.BulkExportOpts{})
+		require.Nil(t, err)
+
+		th2 := Setup(t).InitBasic()
+		defer th2.TearDown()
+
+		// import the exported channel
+		err, _ = th2.App.BulkImport(th2.Context, &b, nil, false, 5)
+		require.Nil(t, err)
+
+		channels, nErr = th2.App.Srv().Store().Channel().GetAllDirectChannelsForExportAfter(1000, "00000000", false)
+		require.NoError(t, nErr)
+		assert.Equal(t, 1, len(channels))
+
+		// Ensure the posts of the deleted DM channel do not leak to the self-DM channel
+		posts, nErr := th2.App.Srv().Store().Post().GetPosts(model.GetPostsOptions{
+			ChannelId:      channels[0].Id,
+			PerPage:        1000,
+			IncludeDeleted: true,
+		}, false, nil)
+		require.NoError(t, nErr)
+		assert.Equal(t, 1, len(posts.Posts))
 	})
 }
 
@@ -796,6 +845,146 @@ func TestExportPostsWithThread(t *testing.T) {
 		require.Nil(t, err)
 		assertThreadFollowers(t, &b, thread.CreateAt, []string{th1.BasicUser.Username, th1.BasicUser2.Username})
 	})
+}
+
+func TestExportFileWarnings(t *testing.T) {
+	testCases := []struct {
+		Description string
+		ConfigFunc  func(cfg *model.Config)
+	}{
+		{
+			"local",
+			func(cfg *model.Config) {
+				cfg.FileSettings.DriverName = model.NewPointer(model.ImageDriverLocal)
+			},
+		},
+		{
+			"s3",
+			func(cfg *model.Config) {
+				s3Host := os.Getenv("CI_MINIO_HOST")
+				if s3Host == "" {
+					s3Host = "localhost"
+				}
+
+				s3Port := os.Getenv("CI_MINIO_PORT")
+				if s3Port == "" {
+					s3Port = "9000"
+				}
+
+				s3Endpoint := fmt.Sprintf("%s:%s", s3Host, s3Port)
+				cfg.FileSettings.DriverName = model.NewPointer(model.ImageDriverS3)
+				cfg.FileSettings.AmazonS3AccessKeyId = model.NewPointer(model.MinioAccessKey)
+				cfg.FileSettings.AmazonS3SecretAccessKey = model.NewPointer(model.MinioSecretKey)
+				cfg.FileSettings.AmazonS3Bucket = model.NewPointer(model.MinioBucket)
+				cfg.FileSettings.AmazonS3PathPrefix = model.NewPointer("")
+				cfg.FileSettings.AmazonS3Endpoint = model.NewPointer(s3Endpoint)
+				cfg.FileSettings.AmazonS3Region = model.NewPointer("")
+				cfg.FileSettings.AmazonS3SSL = model.NewPointer(false)
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Description, func(t *testing.T) {
+			th := Setup(t)
+			defer th.TearDown()
+
+			th.App.UpdateConfig(testCase.ConfigFunc)
+
+			// Create a buffer to capture logs
+			buffer := &mlog.Buffer{}
+			err := mlog.AddWriterTarget(th.TestLogger, buffer, true, mlog.StdAll...)
+			require.NoError(t, err)
+
+			testsDir, _ := fileutils.FindDir("tests")
+			dir, err := os.MkdirTemp("", "import_test")
+			require.NoError(t, err)
+			defer os.RemoveAll(dir)
+
+			extractImportFile := func(filePath string) *os.File {
+				importFile, err2 := os.Open(filePath)
+				require.NoError(t, err2)
+				defer importFile.Close()
+
+				info, err2 := importFile.Stat()
+				require.NoError(t, err2)
+
+				paths, err2 := utils.UnzipToPath(importFile, info.Size(), dir)
+				require.NoError(t, err2)
+				require.NotEmpty(t, paths)
+
+				jsonFile, err2 := os.Open(filepath.Join(dir, "import.jsonl"))
+				require.NoError(t, err2)
+
+				return jsonFile
+			}
+
+			jsonFile := extractImportFile(filepath.Join(testsDir, "import_test.zip"))
+			defer jsonFile.Close()
+
+			appErr, _ := th.App.BulkImportWithPath(th.Context, jsonFile, nil, false, true, 1, dir)
+			require.Nil(t, appErr)
+
+			// delete one of the files
+			params := &model.SearchParams{Terms: "test3.png", SearchWithoutUserId: true}
+			results, err := th.App.Srv().Store().FileInfo().Search(th.Context, []*model.SearchParams{params}, "", "", 0, 20)
+			require.NoError(t, err)
+			require.Len(t, results.FileInfos, 1)
+
+			for _, info2 := range results.FileInfos {
+				err2 := th.App.RemoveFile(info2.Path)
+				require.Nil(t, err2)
+			}
+
+			exportFile, err := os.Create(filepath.Join(dir, "export.zip"))
+			require.NoError(t, err)
+
+			job, appErr := th.App.Srv().Jobs.CreateJob(th.Context, model.JobTypeExportProcess, nil)
+			require.Nil(t, appErr)
+			ok, appErr := th.App.Srv().Jobs.ClaimJob(job)
+			require.Nil(t, appErr)
+			require.True(t, ok)
+			job, appErr = th.App.Srv().Jobs.GetJob(th.Context, job.Id)
+			require.Nil(t, appErr)
+
+			opts := model.BulkExportOpts{
+				IncludeAttachments: true,
+				CreateArchive:      true,
+			}
+			appErr = th.App.BulkExport(th.Context, exportFile, dir, job, opts)
+			// should not get an error for the missing file
+			require.Nil(t, appErr)
+
+			// should get a warning instead:
+			testlib.AssertLog(t, buffer, mlog.LvlWarn.Name, "Unable to export file attachment")
+
+			// should get info in the job data:
+			job, appErr = th.App.Srv().Jobs.GetJob(th.Context, job.Id)
+			require.Nil(t, appErr)
+			warnings, ok := job.Data["num_warnings"]
+			require.True(t, ok)
+			require.Equal(t, "1", warnings)
+
+			exportFile.Close()
+
+			// Verify warnings.txt exists in the zip and contains expected content
+			exportZipPath := filepath.Join(dir, "export.zip")
+			exportZipFile, err := os.Open(exportZipPath)
+			require.NoError(t, err)
+			defer exportZipFile.Close()
+
+			info, err := exportZipFile.Stat()
+			require.NoError(t, err)
+
+			paths, err := utils.UnzipToPath(exportZipFile, info.Size(), dir)
+			require.NoError(t, err)
+			require.Contains(t, paths, filepath.Join(dir, warningsFilename))
+
+			warningsContent, err := os.ReadFile(filepath.Join(dir, warningsFilename))
+			require.NoError(t, err)
+			require.Contains(t, string(warningsContent), "Unable to export file attachment, attachment path:")
+		})
+	}
 }
 
 func TestBulkExport(t *testing.T) {
